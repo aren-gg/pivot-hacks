@@ -4,6 +4,7 @@ export default function Tabs({ active, onChange }) {
   const tabs = [
     { id: 'week', label: 'This Week' },
     { id: 'grocery', label: 'Grocery List' },
+    { id: 'fridge', label: 'Fridge' },
     { id: 'preferences', label: 'Preferences' }
   ];
 

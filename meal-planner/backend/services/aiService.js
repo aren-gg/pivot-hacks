@@ -82,7 +82,7 @@ Rules:
           ]
         }
       ],
-      generationConfig: { maxOutputTokens: 2000, responseMimeType: 'application/json' }
+      generationConfig: { maxOutputTokens: 8000, responseMimeType: 'application/json' }
     })
   });
 
@@ -92,9 +92,25 @@ Rules:
   }
 
   const data = await res.json();
-  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const candidate = data?.candidates?.[0];
+  const parts = candidate?.content?.parts || [];
   const raw = parts.map((p) => p.text || '').join('');
-  const parsed = extractJson(raw);
+
+  if (!raw.trim()) {
+    throw new Error(
+      `Gemini returned no text (finishReason: ${candidate?.finishReason || 'unknown'}). Try a clearer receipt photo.`
+    );
+  }
+  if (candidate?.finishReason === 'MAX_TOKENS') {
+    throw new Error('The receipt had too many items to read in one pass. Try a photo of fewer items at a time.');
+  }
+
+  let parsed;
+  try {
+    parsed = extractJson(raw);
+  } catch (e) {
+    throw new Error('Could not parse the receipt items. Try a clearer photo.');
+  }
   return Array.isArray(parsed) ? parsed : parsed.items || [];
 }
 
@@ -226,14 +242,15 @@ async function parseMessage(text) {
 Today's date is ${today}. Resolve any relative dates (e.g. "in 5 days", "next friday") to an absolute YYYY-MM-DD based on today.
 Output ONLY valid JSON matching exactly this shape, no prose, no markdown fences:
 {
-  "intent": "craving" | "fridge_add" | "fridge_remove" | "grocery_bought" | "generate_plan" | "show_plan" | "show_fridge" | "grocery_list" | "other",
+  "intent": "craving" | "fridge_add" | "fridge_remove" | "grocery_bought" | "grocery_add" | "generate_plan" | "show_plan" | "show_fridge" | "grocery_list" | "other",
   "items": [{"name": "string", "quantity": number, "unit": "string", "expires_at": "YYYY-MM-DD or empty string if no expiry mentioned"}],
   "craving_text": "string, only for intent=craving",
   "reply": "string, one short friendly sentence confirming what you understood, in the app's plain conversational voice, no emoji spam (max one emoji)"
 }
 Guidance:
 - "I'm craving spicy noodles" -> intent craving, craving_text "spicy noodles"
-- "bought 2 lbs chicken thighs and a bag of rice" -> intent grocery_bought, items for each thing bought
+- "bought 2 lbs chicken thighs and a bag of rice" -> intent grocery_bought (already purchased -> goes into fridge), items for each thing bought
+- "add milk to my shopping list" / "I need to buy eggs" / "put tomatoes on the grocery list" -> intent grocery_add (still needs to be bought -> goes on the to-buy list), items
 - "used up the eggs" / "we're out of milk" -> intent fridge_remove, items
 - "just got back from the store, added broccoli, tofu, soy sauce to the fridge" -> intent fridge_add, items
 - "bought milk, expires next friday" or "chicken that goes bad in 3 days" -> set that item's expires_at to the resolved YYYY-MM-DD date; otherwise leave expires_at empty
@@ -248,4 +265,50 @@ Guidance:
   return extractJson(raw);
 }
 
-module.exports = { generateWeekPlan, parseMessage, parseReceipt, callClaude, extractJson };
+/**
+ * Regenerate a SINGLE meal using only what's currently in the fridge (plus
+ * basic pantry staples), for when the user has run out of ingredients for the
+ * originally planned meal. Returns one meal object in the same shape as a meal
+ * inside generateWeekPlan's output.
+ */
+async function regenerateMeal({ mealType, dayDate, fridgeItems = [], preferences = {}, avoidTitle = '' }) {
+  const prefs = preferences || {};
+  const sym = prefs.currency_symbol || '$';
+  const code = prefs.currency_code || 'USD';
+
+  const system = `You create ONE ${mealType || 'meal'} using ONLY ingredients the user already has on hand (plus basic pantry staples like salt, pepper, oil, common spices).
+The user has run out of ingredients for their originally planned meal, so you must adapt to what's actually in their fridge.
+Output ONLY valid JSON, no prose, no markdown fences, matching exactly this shape:
+{
+  "meal_type": "${mealType || 'dinner'}",
+  "title": "string, short recipe name",
+  "subtitle": "string, e.g. 'made from what's in your fridge' or empty",
+  "is_leftover": false,
+  "price": number (estimated cost per serving in ${code}, 1 decimal),
+  "protein": "string, main protein used, empty if none",
+  "needs_defrost": true | false,
+  "prep_minutes": number,
+  "cook_minutes": number,
+  "difficulty": "easy" | "medium" | "hard",
+  "ingredients": [{"name": "string", "quantity": number, "unit": "string", "purchase_package": "string", "package_price": number, "expires_on": "YYYY-MM-DD"}],
+  "recipe": "string, 2-4 short sentences"
+}
+Rules:
+- Use ONLY items from the provided fridge list plus basic staples. Do NOT introduce new main ingredients that would require shopping.
+- Prices in ${code} (${sym}); prioritize fridge items expiring soonest.
+${avoidTitle ? `- Make something different from "${avoidTitle}" (that's the meal they can no longer make).` : ''}
+${prefs.lifestyle && prefs.lifestyle.trim() ? `- Respect dietary needs: ${prefs.lifestyle.trim()}.` : ''}
+- If the fridge truly has too little to make anything, still return a minimal simple dish from whatever is closest.`;
+
+  const prompt = `Meal to create: ${mealType || 'dinner'}${dayDate ? ` for ${dayDate}` : ''}.
+
+Current fridge inventory (use these):
+${fridgeItems.length ? fridgeItems.map((f) => `- ${f.quantity} ${f.unit} ${f.name}${f.expires_at ? ` (expires ${f.expires_at})` : ''}`).join('\n') : '(empty)'}
+
+Return the single meal JSON now.`;
+
+  const raw = await callClaude({ system, prompt, maxTokens: 4000 });
+  return extractJson(raw);
+}
+
+module.exports = { generateWeekPlan, parseMessage, parseReceipt, regenerateMeal, callClaude, extractJson };

@@ -43,6 +43,17 @@ router.post('/', async (req, res) => {
         await planService.generatePlanForWeek();
         break;
       }
+      case 'grocery_add': {
+        const weekStart = planService.currentWeekStartISO();
+        for (const it of items) {
+          planService.addManualGroceryItem(weekStart, {
+            name: it.name,
+            quantity: it.quantity || 1,
+            unit: it.unit || ''
+          });
+        }
+        break;
+      }
       case 'show_fridge': {
         const fridge = planService.getActiveFridgeItems();
         parsed.reply = fridge.length

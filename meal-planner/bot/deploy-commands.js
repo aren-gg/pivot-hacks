@@ -37,7 +37,32 @@ const commands = [
 
   new SlashCommandBuilder().setName('plan-generate').setDescription("Generate this week's meal plan now"),
   new SlashCommandBuilder().setName('plan-today').setDescription("Show today's lunch and dinner"),
+
+  new SlashCommandBuilder()
+    .setName('meal-swap')
+    .setDescription("Ran out of ingredients? Re-make a planned meal using only what's in your fridge")
+    .addStringOption((o) =>
+      o
+        .setName('meal')
+        .setDescription('Which meal to swap')
+        .setRequired(true)
+        .addChoices({ name: 'lunch', value: 'lunch' }, { name: 'dinner', value: 'dinner' })
+    )
+    .addStringOption((o) =>
+      o
+        .setName('when')
+        .setDescription('Which day (default today)')
+        .setRequired(false)
+        .addChoices({ name: 'today', value: 'today' }, { name: 'tomorrow', value: 'tomorrow' })
+    ),
   new SlashCommandBuilder().setName('grocery-list').setDescription("Show this week's grocery list"),
+
+  new SlashCommandBuilder()
+    .setName('grocery-add')
+    .setDescription('Add an item to your grocery (to-buy) list')
+    .addStringOption((o) => o.setName('name').setDescription('item to buy').setRequired(true))
+    .addNumberOption((o) => o.setName('quantity').setDescription('amount').setRequired(false))
+    .addStringOption((o) => o.setName('unit').setDescription('e.g. lbs, cans').setRequired(false)),
 
   new SlashCommandBuilder()
     .setName('preferences')

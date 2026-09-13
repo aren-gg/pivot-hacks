@@ -124,6 +124,37 @@ async function handleSlashCommand(interaction) {
       return;
     }
 
+    if (commandName === 'meal-swap') {
+      const mealType = interaction.options.getString('meal', true);
+      const when = interaction.options.getString('when') ?? 'today';
+      const d = new Date();
+      if (when === 'tomorrow') d.setDate(d.getDate() + 1);
+      const dayISO = d.toISOString().slice(0, 10);
+
+      const plan = await api.getCurrentPlan();
+      try {
+        const result = await api.swapMeal(plan.weekStart, dayISO, mealType);
+        const m = result.meal;
+        const timing =
+          m.prepMinutes != null || m.cookMinutes != null
+            ? `\n⏱ ${(Number(m.prepMinutes) || 0) + (Number(m.cookMinutes) || 0)} min · ${m.difficulty || ''}`
+            : '';
+        const ings = (m.ingredients || []).map((i) => `• ${i.quantity} ${i.unit} ${i.name}`.replace('  ', ' ')).join('\n');
+        const embed = new EmbedBuilder()
+          .setColor(ACCENT)
+          .setTitle(`New ${mealType} from your fridge: ${m.title}`)
+          .setDescription(
+            `Was: ${result.previousTitle}${timing}\n\n${ings}\n\n${m.recipe || ''}`.slice(0, 4000)
+          );
+        await interaction.editReply({ embeds: [embed] });
+      } catch (err) {
+        await interaction.editReply(
+          `Couldn't swap that meal: ${err.message}. Is there a ${mealType} planned for ${dayISO}? Try \`/plan-generate\` first.`
+        );
+      }
+      return;
+    }
+
     if (commandName === 'plan-today') {
       const plan = await api.getCurrentPlan();
       const todayISO = new Date().toISOString().slice(0, 10);
@@ -137,6 +168,16 @@ async function handleSlashCommand(interaction) {
         .setTitle(`Today · ${todayISO}`)
         .setDescription(today.meals.map((m) => mealLine(m, plan.currency?.symbol || '$')).join('\n'));
       await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
+    if (commandName === 'grocery-add') {
+      const name = interaction.options.getString('name', true);
+      const quantity = interaction.options.getNumber('quantity') ?? 1;
+      const unit = interaction.options.getString('unit') ?? '';
+      const plan = await api.getCurrentPlan();
+      await api.addGroceryToBuy(plan.weekStart, { name, quantity, unit });
+      await interaction.editReply(`Added ${quantity} ${unit} ${name} to your grocery list.`.replace('  ', ' '));
       return;
     }
 

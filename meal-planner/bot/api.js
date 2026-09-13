@@ -26,9 +26,13 @@ module.exports = {
   addGrocery: (item) => request('/api/groceries', { method: 'POST', body: JSON.stringify(item) }),
   addCraving: (text) => request('/api/cravings', { method: 'POST', body: JSON.stringify({ text }) }),
   getCurrentPlan: () => request('/api/plan/current'),
+  swapMeal: (weekStart, dayDate, mealType) =>
+    request(`/api/plan/${weekStart}/swap`, { method: 'POST', body: JSON.stringify({ dayDate, mealType }) }),
   generatePlan: (weekStart) =>
     request('/api/plan/generate', { method: 'POST', body: JSON.stringify(weekStart ? { weekStart } : {}) }),
   getGroceryList: (weekStart) => request(`/api/plan/${weekStart}/grocery-list`),
+  addGroceryToBuy: (weekStart, item) =>
+    request(`/api/plan/${weekStart}/grocery-list`, { method: 'POST', body: JSON.stringify(item) }),
   getDueDefrostReminders: () => request('/api/notifications/defrost-due'),
   ackDefrostReminders: (mealIds) =>
     request('/api/notifications/defrost-due/ack', { method: 'POST', body: JSON.stringify({ mealIds }) })

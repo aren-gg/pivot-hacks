@@ -220,6 +220,68 @@ function getWeekPlan(weekStartISO) {
   return { weekStart: weekStartISO, weekId: week.id, label: week.label, days, hasPlan: meals.length > 0, currency: currencyInfo() };
 }
 
+/** Merge grocery rows for a week that share the same item name (case-insensitive),
+ * summing quantities and keeping one row. Prefers a checked state if any dup is
+ * checked, and keeps the first non-null price/package_size. */
+function dedupeGroceryRows(weekId) {
+  const rows = db
+    .prepare('SELECT * FROM grocery_list_items WHERE week_id = ? ORDER BY id ASC')
+    .all(weekId);
+
+  const byName = new Map(); // nameKey -> keeper row (with merged fields)
+  const toDelete = [];
+  for (const r of rows) {
+    const key = r.name.toLowerCase().trim();
+    const keeper = byName.get(key);
+    if (!keeper) {
+      byName.set(key, { ...r, quantity: Number(r.quantity) || 0 });
+      continue;
+    }
+    keeper.quantity += Number(r.quantity) || 0;
+    keeper.checked = keeper.checked || r.checked ? 1 : 0;
+    if (keeper.price == null && r.price != null) keeper.price = r.price;
+    if (!keeper.package_size && r.package_size) keeper.package_size = r.package_size;
+    if (!keeper.unit && r.unit) keeper.unit = r.unit;
+    // A merged line is manual if either side was manual (so it survives recompute).
+    if (r.source === 'manual') keeper.source = 'manual';
+    toDelete.push(r.id);
+  }
+
+  const update = db.prepare(
+    'UPDATE grocery_list_items SET quantity = ?, checked = ?, price = ?, package_size = ?, unit = ?, source = ? WHERE id = ?'
+  );
+  const delStmt = db.prepare('DELETE FROM grocery_list_items WHERE id = ?');
+  const tx = db.transaction(() => {
+    for (const k of byName.values()) {
+      update.run(
+        Math.round(k.quantity * 100) / 100,
+        k.checked ? 1 : 0,
+        k.price ?? null,
+        k.package_size || '',
+        k.unit || '',
+        k.source || 'plan',
+        k.id
+      );
+    }
+    for (const id of toDelete) delStmt.run(id);
+  });
+  tx();
+}
+
+/** Add a manually-entered "to buy" item to a week's grocery list. */
+function addManualGroceryItem(weekStartISO, { name, quantity = 1, unit = '' }) {
+  const week = ensureWeek(weekStartISO);
+  db.prepare(
+    "INSERT INTO grocery_list_items (week_id, name, quantity, unit, source, checked) VALUES (?, ?, ?, ?, 'manual', 0)"
+  ).run(week.id, name, Number(quantity) || 1, unit || '');
+  return computeGroceryList(weekStartISO);
+}
+
+/** Remove a grocery list item by id (works for both manual and plan rows). */
+function removeGroceryItem(id) {
+  return db.prepare('DELETE FROM grocery_list_items WHERE id = ?').run(id).changes;
+}
+
 /** Aggregate every ingredient across the week, minus what's already in the fridge. */
 function computeGroceryList(weekStartISO) {
   const week = db.prepare('SELECT * FROM weeks WHERE week_start = ?').get(weekStartISO);
@@ -266,13 +328,16 @@ function computeGroceryList(weekStartISO) {
   }
   items.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Persist so checkbox state can stick across reloads.
-  const existing = db.prepare('SELECT name, unit, checked FROM grocery_list_items WHERE week_id = ?').all(week.id);
+  // Persist so checkbox state can stick across reloads. Only the plan-derived
+  // rows are rebuilt; manually-added items (source='manual') are preserved.
+  const existing = db
+    .prepare("SELECT name, unit, checked FROM grocery_list_items WHERE week_id = ? AND source = 'plan'")
+    .all(week.id);
   const checkedMap = new Map(existing.map((e) => [`${e.name.toLowerCase()}|${e.unit.toLowerCase()}`, e.checked]));
 
-  db.prepare('DELETE FROM grocery_list_items WHERE week_id = ?').run(week.id);
+  db.prepare("DELETE FROM grocery_list_items WHERE week_id = ? AND source = 'plan'").run(week.id);
   const insert = db.prepare(
-    'INSERT INTO grocery_list_items (week_id, name, quantity, unit, package_size, price, checked) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    "INSERT INTO grocery_list_items (week_id, name, quantity, unit, package_size, price, source, checked) VALUES (?, ?, ?, ?, ?, ?, 'plan', ?)"
   );
   const tx = db.transaction(() => {
     for (const it of items) {
@@ -281,6 +346,10 @@ function computeGroceryList(weekStartISO) {
     }
   });
   tx();
+
+  // Merge duplicate rows (same item name, case-insensitive) across plan +
+  // manual entries into a single line with the summed quantity.
+  dedupeGroceryRows(week.id);
 
   const rows = db.prepare('SELECT * FROM grocery_list_items WHERE week_id = ? ORDER BY name ASC').all(week.id);
   const total = rows.reduce((sum, r) => sum + (Number(r.price) || 0), 0);
@@ -313,6 +382,74 @@ function markDefrostNotified(mealIds) {
   tx();
 }
 
+/** Regenerate a single meal using only what's in the fridge (ran out of the
+ * originally planned ingredients). Updates the meal row in place. */
+async function swapMealFromFridge(mealId) {
+  const meal = db.prepare('SELECT * FROM meals WHERE id = ?').get(mealId);
+  if (!meal) throw new Error('meal not found');
+
+  const fridgeItems = getActiveFridgeItems();
+  const preferences = getPreferences();
+
+  const m = await aiService.regenerateMeal({
+    mealType: meal.meal_type,
+    dayDate: meal.day_date,
+    fridgeItems,
+    preferences,
+    avoidTitle: meal.title
+  });
+
+  db.prepare(
+    `UPDATE meals SET title=@title, subtitle=@subtitle, is_leftover=@is_leftover, price=@price,
+       protein=@protein, needs_defrost=@needs_defrost, prep_minutes=@prep_minutes,
+       cook_minutes=@cook_minutes, difficulty=@difficulty, ingredients_json=@ingredients_json,
+       recipe=@recipe, defrost_notified=0 WHERE id=@id`
+  ).run({
+    id: mealId,
+    title: m.title || meal.title,
+    subtitle: m.subtitle || 'made from what\'s in your fridge',
+    is_leftover: m.is_leftover ? 1 : 0,
+    price: m.price ?? null,
+    protein: m.protein || '',
+    needs_defrost: m.needs_defrost ? 1 : 0,
+    prep_minutes: Number.isFinite(m.prep_minutes) ? Math.round(m.prep_minutes) : null,
+    cook_minutes: Number.isFinite(m.cook_minutes) ? Math.round(m.cook_minutes) : null,
+    difficulty: m.difficulty || '',
+    ingredients_json: JSON.stringify(m.ingredients || []),
+    recipe: m.recipe || ''
+  });
+
+  const week = db.prepare('SELECT week_start FROM weeks WHERE id = ?').get(meal.week_id);
+  const updated = db.prepare('SELECT * FROM meals WHERE id = ?').get(mealId);
+  return {
+    weekStart: week ? week.week_start : null,
+    dayDate: meal.day_date,
+    mealType: meal.meal_type,
+    previousTitle: meal.title,
+    meal: {
+      id: updated.id,
+      mealType: updated.meal_type,
+      title: updated.title,
+      subtitle: updated.subtitle,
+      price: updated.price,
+      prepMinutes: updated.prep_minutes,
+      cookMinutes: updated.cook_minutes,
+      difficulty: updated.difficulty,
+      ingredients: JSON.parse(updated.ingredients_json || '[]'),
+      recipe: updated.recipe
+    }
+  };
+}
+
+/** Find a meal id by week start, day date, and meal type. */
+function findMeal(weekStartISO, dayDate, mealType) {
+  const week = db.prepare('SELECT id FROM weeks WHERE week_start = ?').get(weekStartISO);
+  if (!week) return null;
+  return db
+    .prepare('SELECT * FROM meals WHERE week_id = ? AND day_date = ? AND lower(meal_type) = lower(?)')
+    .get(week.id, dayDate, mealType);
+}
+
 module.exports = {
   currentWeekStartISO,
   startOfWeek,
@@ -329,5 +466,9 @@ module.exports = {
   getRecentGroceries,
   getActiveCravings,
   getPreferences,
-  updatePreferences
+  updatePreferences,
+  addManualGroceryItem,
+  removeGroceryItem,
+  swapMealFromFridge,
+  findMeal
 };

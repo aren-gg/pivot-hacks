@@ -6,6 +6,7 @@ import Tabs from '../components/Tabs';
 import DayCard from '../components/DayCard';
 import GroceryList from '../components/GroceryList';
 import Preferences from '../components/Preferences';
+import Fridge from '../components/Fridge';
 import { api, addDaysISO, getCurrentWeekStart } from '../lib/api';
 
 export default function Home() {
@@ -55,14 +56,16 @@ export default function Home() {
 
         {tab === 'preferences' && <Preferences />}
 
-        {tab !== 'preferences' && error && (
+        {tab === 'fridge' && <Fridge />}
+
+        {tab !== 'preferences' && tab !== 'fridge' && error && (
           <div className="rounded-xl2 bg-card border border-rust px-6 py-4 text-rustDark mb-5">
             Couldn't reach the planner API: {error}. Is the backend running and{' '}
             <code>NEXT_PUBLIC_API_URL</code> set correctly?
           </div>
         )}
 
-        {tab !== 'preferences' && loading && !error && <p className="text-muted">Loading your plan…</p>}
+        {tab !== 'preferences' && tab !== 'fridge' && loading && !error && <p className="text-muted">Loading your plan…</p>}
 
         {!loading && !error && tab === 'week' && (
           <>
@@ -84,6 +87,8 @@ export default function Home() {
             items={groceryList.items}
             total={groceryList.total || 0}
             currencySymbol={groceryList.currency?.symbol || '$'}
+            weekStart={weekStart}
+            onChanged={() => api.getGroceryList(weekStart).then(setGroceryList)}
           />
         )}
       </div>

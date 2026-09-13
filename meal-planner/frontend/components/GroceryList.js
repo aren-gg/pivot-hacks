@@ -1,10 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
-export default function GroceryList({ items: initialItems, total = 0, currencySymbol = '$' }) {
+export default function GroceryList({ items: initialItems, total = 0, currencySymbol = '$', weekStart, onChanged }) {
   const [items, setItems] = useState(initialItems);
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    setItems(initialItems);
+  }, [initialItems]);
 
   async function toggle(id) {
     const next = items.map((it) => (it.id === id ? { ...it, checked: it.checked ? 0 : 1 } : it));
@@ -13,48 +19,97 @@ export default function GroceryList({ items: initialItems, total = 0, currencySy
     try {
       await api.setGroceryChecked(id, !!item.checked);
     } catch {
-      // revert on failure
       setItems(items);
     }
   }
 
-  if (!items.length) {
-    return (
-      <div className="rounded-xl2 bg-card border border-line px-6 py-10 text-center text-muted">
-        Nothing needed this week — your fridge already covers the plan.
-      </div>
-    );
+  async function addItem(e) {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name || !weekStart) return;
+    setAdding(true);
+    try {
+      await api.addGroceryItem(weekStart, { name, quantity: 1, unit: '' });
+      setNewName('');
+      onChanged && (await onChanged());
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function remove(id) {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+    try {
+      await api.removeGroceryItem(id);
+      onChanged && (await onChanged());
+    } catch {
+      onChanged && onChanged();
+    }
   }
 
   const money = (n) => `${currencySymbol}${Number(n).toFixed(2)}`;
 
   return (
-    <div className="rounded-xl2 bg-card border border-line px-6 py-2 divide-y divide-line">
-      {items.map((item) => (
-        <label key={item.id} className="flex items-center gap-3 py-3 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={!!item.checked}
-            onChange={() => toggle(item.id)}
-            className="h-5 w-5 accent-rust rounded"
-          />
-          <span className={`flex-1 ${item.checked ? 'line-through text-muted' : 'text-ink'}`}>
-            {item.name}
-            {item.package_size ? <span className="text-muted text-sm"> · {item.package_size}</span> : null}
-          </span>
-          <span className="text-sm text-muted w-24 text-right">
-            {item.quantity} {item.unit}
-          </span>
-          <span className={`text-sm w-20 text-right ${item.checked ? 'text-muted' : 'text-ink'}`}>
-            {item.price != null ? money(item.price) : '—'}
-          </span>
-        </label>
-      ))}
+    <div className="space-y-4">
+      <form onSubmit={addItem} className="flex gap-2">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="Add an item to buy…"
+          className="flex-1 rounded-xl2 border border-line bg-card px-4 py-2 text-ink"
+        />
+        <button
+          type="submit"
+          disabled={adding || !newName.trim()}
+          className="px-5 py-2 rounded-full bg-rust text-white font-medium hover:bg-rustDark transition-colors disabled:opacity-50"
+        >
+          Add
+        </button>
+      </form>
 
-      <div className="flex items-center justify-between py-4 font-semibold text-ink">
-        <span>Estimated total</span>
-        <span>{money(total)}</span>
-      </div>
+      {!items.length ? (
+        <div className="rounded-xl2 bg-card border border-line px-6 py-10 text-center text-muted">
+          Nothing on the list yet — add an item above, or generate a plan.
+        </div>
+      ) : (
+        <div className="rounded-xl2 bg-card border border-line px-6 py-2 divide-y divide-line">
+          {items.map((item) => (
+            <div key={item.id} className="flex items-center gap-3 py-3">
+              <input
+                type="checkbox"
+                checked={!!item.checked}
+                onChange={() => toggle(item.id)}
+                className="h-5 w-5 accent-rust rounded cursor-pointer"
+              />
+              <span className={`flex-1 ${item.checked ? 'line-through text-muted' : 'text-ink'}`}>
+                {item.name}
+                {item.package_size ? <span className="text-muted text-sm"> · {item.package_size}</span> : null}
+                {item.source === 'manual' ? <span className="text-muted text-xs"> · added</span> : null}
+              </span>
+              <span className="text-sm text-muted w-20 text-right">
+                {item.quantity} {item.unit}
+              </span>
+              <span className={`text-sm w-16 text-right ${item.checked ? 'text-muted' : 'text-ink'}`}>
+                {item.price != null ? money(item.price) : '—'}
+              </span>
+              <button
+                onClick={() => remove(item.id)}
+                aria-label={`Remove ${item.name}`}
+                className="text-muted hover:text-rustDark px-1"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+
+          <div className="flex items-center justify-between py-4 font-semibold text-ink">
+            <span>Estimated total</span>
+            <span>{money(total)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

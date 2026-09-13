@@ -41,10 +41,33 @@ export function getCurrentWeekStart() {
   return utc.toISOString().slice(0, 10);
 }
 
+async function post(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`POST ${path} failed: ${res.status} ${t}`);
+  }
+  return res.json();
+}
+
+async function del(path) {
+  const res = await fetch(`${BASE}${path}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`DELETE ${path} failed: ${res.status}`);
+}
+
 export const api = {
   getWeekPlan: (weekStart) => get(`/api/plan/${weekStart}`),
   getGroceryList: (weekStart) => get(`/api/plan/${weekStart}/grocery-list`),
   setGroceryChecked: (id, checked) => patch(`/api/plan/grocery-list/${id}`, { checked }),
+  addGroceryItem: (weekStart, item) => post(`/api/plan/${weekStart}/grocery-list`, item),
+  removeGroceryItem: (id) => del(`/api/plan/grocery-list/${id}`),
+  getFridge: () => get('/api/fridge'),
+  addFridgeItem: (item) => post('/api/fridge', item),
+  removeFridgeItem: (id) => del(`/api/fridge/${id}`),
   getPreferences: () => get('/api/preferences'),
   savePreferences: (prefs) => put('/api/preferences', prefs)
 };
