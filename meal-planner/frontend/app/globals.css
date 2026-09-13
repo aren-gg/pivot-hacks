@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html,
+body {
+  background-color: #f7f1e6;
+  color: #241d16;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Visible keyboard focus everywhere */
+:focus-visible {
+  outline: 2px solid #b5502e;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
