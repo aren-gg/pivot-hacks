@@ -10,6 +10,7 @@ const notificationsRoutes = require('./routes/notifications');
 const parseRoutes = require('./routes/parse');
 const preferencesRoutes = require('./routes/preferences');
 const receiptRoutes = require('./routes/receipt');
+const voiceFeedbackRoutes = require('./routes/voiceFeedback');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -28,6 +29,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/parse', parseRoutes);
 app.use('/api/preferences', preferencesRoutes);
 app.use('/api/receipt', receiptRoutes);
+app.use('/api/voice-feedback', voiceFeedbackRoutes);
 
 app.use((req, res) => res.status(404).json({ error: 'not found' }));
 

@@ -58,6 +58,11 @@ const commands = [
   new SlashCommandBuilder().setName('grocery-list').setDescription("Show this week's grocery list"),
 
   new SlashCommandBuilder()
+    .setName('cook')
+    .setDescription("Hands-free cooking help: I'll listen in your voice channel and give feedback as you talk"),
+  new SlashCommandBuilder().setName('stop-cooking').setDescription('Stop listening in the voice channel'),
+
+  new SlashCommandBuilder()
     .setName('grocery-add')
     .setDescription('Add an item to your grocery (to-buy) list')
     .addStringOption((o) => o.setName('name').setDescription('item to buy').setRequired(true))

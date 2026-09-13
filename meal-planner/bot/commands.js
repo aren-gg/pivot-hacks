@@ -1,5 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const api = require('./api');
+const { startCooking, stopCooking } = require('./voice');
 
 const ACCENT = 0xb5502e;
 const WEBSITE_URL = process.env.WEBSITE_URL || 'http://localhost:3000';
@@ -232,6 +233,16 @@ async function handleSlashCommand(interaction) {
       const { preferences: p } = await api.getPreferences();
       const embed = new EmbedBuilder().setColor(ACCENT).setTitle('Your meal preferences').setDescription(prefsSummary(p));
       await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
+    if (commandName === 'cook') {
+      await startCooking(interaction);
+      return;
+    }
+
+    if (commandName === 'stop-cooking') {
+      await stopCooking(interaction);
       return;
     }
 

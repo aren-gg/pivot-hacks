@@ -311,4 +311,51 @@ Return the single meal JSON now.`;
   return extractJson(raw);
 }
 
-module.exports = { generateWeekPlan, parseMessage, parseReceipt, regenerateMeal, callClaude, extractJson };
+/**
+ * Take a short audio clip of a home cook speaking while cooking, transcribe it,
+ * and return brief spoken-style cooking feedback. `audioBase64` is raw base64
+ * (no data: prefix); `mimeType` e.g. 'audio/wav'. Returns { heard, advice }.
+ */
+async function voiceFeedback(audioBase64, mimeType = 'audio/wav') {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not set. Add it to backend/.env');
+
+  const system = `You are a hands-free sous-chef listening to a home cook who is actively cooking and can't look at a screen.
+You receive a short audio clip of them speaking. Transcribe what they said, then give ONE concise, practical piece of cooking help.
+Output ONLY valid JSON, no prose, no fences, matching exactly:
+{"heard": "string, a clean transcription of what they said", "advice": "string, 1-2 short sentences of actionable cooking help; if it's a question, answer it directly"}
+If the audio has no clear speech or isn't about cooking, set advice to a brief friendly nudge and heard to your best transcription (or "").`;
+
+  const url = `${API_BASE}/${MODEL}:generateContent`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Here is what the cook just said:' },
+            { inline_data: { mime_type: mimeType, data: audioBase64 } }
+          ]
+        }
+      ],
+      generationConfig: { maxOutputTokens: 2000, responseMimeType: 'application/json' }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini audio error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  const candidate = data?.candidates?.[0];
+  const raw = (candidate?.content?.parts || []).map((p) => p.text || '').join('');
+  if (!raw.trim()) throw new Error(`Gemini returned no text (finishReason: ${candidate?.finishReason || 'unknown'}).`);
+  const parsed = extractJson(raw);
+  return { heard: parsed.heard || '', advice: parsed.advice || '' };
+}
+
+module.exports = { generateWeekPlan, parseMessage, parseReceipt, regenerateMeal, voiceFeedback, callClaude, extractJson };
