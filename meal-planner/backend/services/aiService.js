@@ -72,7 +72,7 @@ You output ONLY valid JSON, no prose, no markdown fences, matching exactly this 
           "title": "string, short recipe name",
           "subtitle": "string, e.g. 'standalone, not leftovers' or 'Leftovers: <dinner title>' or empty string",
           "is_leftover": true | false,
-          "price": number (estimated USD cost per serving, 1 decimal),
+          "price": number (estimated cost per serving in the user's currency, 1 decimal),
           "protein": "string, main protein used, empty string if none",
           "needs_defrost": true | false (true only if protein is a frozen meat/fish that must be defrosted the night before),
           "prep_minutes": number (integer, hands-on prep time in minutes),
@@ -119,10 +119,13 @@ Return the JSON now.`;
 /** Prompt rules derived from the user's saved preferences. */
 function personalizationRules(prefs) {
   const rules = [];
+  const sym = prefs.currency_symbol || '$';
+  const code = prefs.currency_code || 'USD';
+  rules.push(`- Estimate every price in ${code} (${sym}). All price numbers must be in ${code}, not USD.`);
   if (prefs.max_price_per_serving) {
-    rules.push(`- Keep every meal at or under $${Number(prefs.max_price_per_serving).toFixed(2)} per serving (the user's budget).`);
+    rules.push(`- Keep every meal at or under ${sym}${Number(prefs.max_price_per_serving).toFixed(2)} per serving (the user's budget).`);
   } else {
-    rules.push('- Keep estimated prices realistic for home cooking (roughly $2-$7 per serving).');
+    rules.push('- Keep estimated prices realistic for home cooking in the user\'s region and currency.');
   }
   if (prefs.max_total_minutes) {
     rules.push(`- Keep prep_minutes + cook_minutes at or under ${prefs.max_total_minutes} minutes total per meal.`);
@@ -143,9 +146,12 @@ function personalizationRules(prefs) {
 
 /** Human-readable preferences block for the user prompt. */
 function personalizationContext(prefs) {
+  const sym = prefs.currency_symbol || '$';
+  const code = prefs.currency_code || 'USD';
   const lines = ['User preferences:'];
+  lines.push(`- Currency: ${code} (${sym})`);
   lines.push(`- Cooking experience: ${prefs.cooking_experience || 'intermediate'}`);
-  lines.push(`- Budget per serving: ${prefs.max_price_per_serving ? '$' + Number(prefs.max_price_per_serving).toFixed(2) : 'no strict limit'}`);
+  lines.push(`- Budget per serving: ${prefs.max_price_per_serving ? sym + Number(prefs.max_price_per_serving).toFixed(2) : 'no strict limit'}`);
   lines.push(`- Max time per meal: ${prefs.max_total_minutes ? prefs.max_total_minutes + ' min' : 'no strict limit'}`);
   lines.push(`- Lifestyle/diet: ${prefs.lifestyle && prefs.lifestyle.trim() ? prefs.lifestyle.trim() : 'no specific restrictions'}`);
   return lines.join('\n') + '\n';

@@ -24,5 +24,7 @@ function ensureColumn(table, column, definition) {
 ensureColumn('meals', 'prep_minutes', 'INTEGER');
 ensureColumn('meals', 'cook_minutes', 'INTEGER');
 ensureColumn('meals', 'difficulty', "TEXT DEFAULT ''");
+ensureColumn('preferences', 'currency_code', "TEXT DEFAULT 'USD'");
+ensureColumn('preferences', 'currency_symbol', "TEXT DEFAULT '$'");
 
 module.exports = db;

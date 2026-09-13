@@ -69,6 +69,11 @@ function getActiveCravings() {
   return db.prepare('SELECT * FROM cravings WHERE active = 1 ORDER BY created_at DESC').all();
 }
 
+function currencyInfo() {
+  const p = getPreferences();
+  return { code: p.currency_code || 'USD', symbol: p.currency_symbol || '$' };
+}
+
 function getPreferences() {
   return (
     db.prepare('SELECT * FROM preferences WHERE id = 1').get() || {
@@ -76,7 +81,9 @@ function getPreferences() {
       lifestyle: '',
       max_price_per_serving: null,
       cooking_experience: 'intermediate',
-      max_total_minutes: null
+      max_total_minutes: null,
+      currency_code: 'USD',
+      currency_symbol: '$'
     }
   );
 }
@@ -90,7 +97,9 @@ function updatePreferences(patch = {}) {
     cooking_experience:
       patch.cooking_experience !== undefined ? patch.cooking_experience : current.cooking_experience,
     max_total_minutes:
-      patch.max_total_minutes !== undefined ? patch.max_total_minutes : current.max_total_minutes
+      patch.max_total_minutes !== undefined ? patch.max_total_minutes : current.max_total_minutes,
+    currency_code: patch.currency_code !== undefined ? patch.currency_code : current.currency_code,
+    currency_symbol: patch.currency_symbol !== undefined ? patch.currency_symbol : current.currency_symbol
   };
   db.prepare(
     `UPDATE preferences
@@ -98,6 +107,8 @@ function updatePreferences(patch = {}) {
          max_price_per_serving = @max_price_per_serving,
          cooking_experience = @cooking_experience,
          max_total_minutes = @max_total_minutes,
+         currency_code = @currency_code,
+         currency_symbol = @currency_symbol,
          updated_at = datetime('now')
      WHERE id = 1`
   ).run(next);
@@ -173,7 +184,8 @@ function getWeekPlan(weekStartISO) {
       weekStart: weekStartISO,
       label: `${PLAN_LABEL} · ${PLAN_PACE}`,
       days: weekDates(weekStartISO).map((date) => ({ date, isToday: date === todayISO, meals: [] })),
-      hasPlan: false
+      hasPlan: false,
+      currency: currencyInfo()
     };
   }
 
@@ -205,13 +217,13 @@ function getWeekPlan(weekStartISO) {
       }))
   }));
 
-  return { weekStart: weekStartISO, weekId: week.id, label: week.label, days, hasPlan: meals.length > 0 };
+  return { weekStart: weekStartISO, weekId: week.id, label: week.label, days, hasPlan: meals.length > 0, currency: currencyInfo() };
 }
 
 /** Aggregate every ingredient across the week, minus what's already in the fridge. */
 function computeGroceryList(weekStartISO) {
   const week = db.prepare('SELECT * FROM weeks WHERE week_start = ?').get(weekStartISO);
-  if (!week) return { weekStart: weekStartISO, items: [] };
+  if (!week) return { weekStart: weekStartISO, items: [], currency: currencyInfo() };
 
   const meals = db.prepare('SELECT ingredients_json FROM meals WHERE week_id = ?').all(week.id);
   const fridge = getActiveFridgeItems();
@@ -256,7 +268,8 @@ function computeGroceryList(weekStartISO) {
 
   return {
     weekStart: weekStartISO,
-    items: db.prepare('SELECT * FROM grocery_list_items WHERE week_id = ? ORDER BY name ASC').all(week.id)
+    items: db.prepare('SELECT * FROM grocery_list_items WHERE week_id = ? ORDER BY name ASC').all(week.id),
+    currency: currencyInfo()
   };
 }
 

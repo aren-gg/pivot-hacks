@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-export default function MealRow({ meal, isFirst }) {
+export default function MealRow({ meal, isFirst, currencySymbol = '$' }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -39,7 +39,7 @@ export default function MealRow({ meal, isFirst }) {
 
         <div className="flex items-center gap-3 shrink-0 mt-0.5">
           {meal.price ? (
-            <span className="text-sm bg-pill text-ink rounded-full px-3 py-1">${Number(meal.price).toFixed(2)}</span>
+            <span className="text-sm bg-pill text-ink rounded-full px-3 py-1">{currencySymbol}{Number(meal.price).toFixed(2)}</span>
           ) : null}
           <span className={`text-muted transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
         </div>

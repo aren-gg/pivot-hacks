@@ -74,7 +74,7 @@ export default function Home() {
               </div>
             )}
             {plan.days.map((day) => (
-              <DayCard key={day.date} day={day} />
+              <DayCard key={day.date} day={day} currencySymbol={plan.currency?.symbol || '$'} />
             ))}
           </>
         )}

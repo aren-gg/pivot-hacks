@@ -50,6 +50,26 @@ const commands = [
     .addIntegerOption((o) => o.setName('max_minutes').setDescription('Max prep+cook minutes per meal').setRequired(false))
     .addStringOption((o) =>
       o.setName('lifestyle').setDescription('Diet/lifestyle, e.g. vegetarian, high-protein').setRequired(false)
+    )
+    .addStringOption((o) =>
+      o
+        .setName('currency')
+        .setDescription('Currency for meal prices')
+        .setRequired(false)
+        .addChoices(
+          { name: 'USD ($)', value: 'USD' },
+          { name: 'EUR (€)', value: 'EUR' },
+          { name: 'GBP (£)', value: 'GBP' },
+          { name: 'JPY (¥)', value: 'JPY' },
+          { name: 'CAD (CA$)', value: 'CAD' },
+          { name: 'AUD (A$)', value: 'AUD' },
+          { name: 'INR (₹)', value: 'INR' },
+          { name: 'CNY (¥)', value: 'CNY' },
+          { name: 'KRW (₩)', value: 'KRW' },
+          { name: 'MXN (MX$)', value: 'MXN' },
+          { name: 'BRL (R$)', value: 'BRL' },
+          { name: 'SGD (S$)', value: 'SGD' }
+        )
     ),
 
   new SlashCommandBuilder().setName('preferences-show').setDescription('Show your current meal preferences')

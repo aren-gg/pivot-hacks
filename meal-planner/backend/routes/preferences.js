@@ -1,12 +1,16 @@
 const express = require('express');
 const planService = require('../services/planService');
+const { CURRENCIES, symbolFor } = require('../currencies');
 
 const router = express.Router();
 
 const EXPERIENCE_LEVELS = ['beginner', 'intermediate', 'advanced'];
 
 router.get('/', (req, res) => {
-  res.json({ preferences: planService.getPreferences() });
+  res.json({
+    preferences: planService.getPreferences(),
+    currencies: Object.entries(CURRENCIES).map(([code, c]) => ({ code, symbol: c.symbol, name: c.name }))
+  });
 });
 
 router.put('/', (req, res) => {
@@ -35,6 +39,15 @@ router.put('/', (req, res) => {
       return res.status(400).json({ error: `cooking_experience must be one of: ${EXPERIENCE_LEVELS.join(', ')}` });
     }
     patch.cooking_experience = exp;
+  }
+
+  if (body.currency_code !== undefined) {
+    const code = String(body.currency_code).toUpperCase();
+    if (!CURRENCIES[code]) {
+      return res.status(400).json({ error: `currency_code must be one of: ${Object.keys(CURRENCIES).join(', ')}` });
+    }
+    patch.currency_code = code;
+    patch.currency_symbol = symbolFor(code);
   }
 
   res.json({ preferences: planService.updatePreferences(patch) });

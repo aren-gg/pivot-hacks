@@ -4,16 +4,18 @@ const api = require('./api');
 const ACCENT = 0xb5502e;
 const WEBSITE_URL = process.env.WEBSITE_URL || 'http://localhost:3000';
 
-function mealLine(meal) {
+function mealLine(meal, symbol = '$') {
   const tag = meal.isLeftover ? ' (leftovers)' : '';
-  const price = meal.price ? ` · $${Number(meal.price).toFixed(2)}` : '';
+  const price = meal.price ? ` · ${symbol}${Number(meal.price).toFixed(2)}` : '';
   return `**${meal.mealType === 'lunch' ? 'Lunch' : 'Dinner'}:** ${meal.title}${tag}${price}`;
 }
 
 function prefsSummary(p) {
+  const sym = p.currency_symbol || '$';
   return [
+    `**Currency:** ${p.currency_code || 'USD'} (${sym})`,
     `**Cooking experience:** ${p.cooking_experience || 'intermediate'}`,
-    `**Budget per serving:** ${p.max_price_per_serving ? '$' + Number(p.max_price_per_serving).toFixed(2) : 'no limit'}`,
+    `**Budget per serving:** ${p.max_price_per_serving ? sym + Number(p.max_price_per_serving).toFixed(2) : 'no limit'}`,
     `**Max time per meal:** ${p.max_total_minutes ? p.max_total_minutes + ' min' : 'no limit'}`,
     `**Lifestyle/diet:** ${p.lifestyle && p.lifestyle.trim() ? p.lifestyle.trim() : 'none set'}`
   ].join('\n');
@@ -94,7 +96,7 @@ async function handleSlashCommand(interaction) {
       const embed = new EmbedBuilder()
         .setColor(ACCENT)
         .setTitle(`Today · ${todayISO}`)
-        .setDescription(today.meals.map(mealLine).join('\n'));
+        .setDescription(today.meals.map((m) => mealLine(m, plan.currency?.symbol || '$')).join('\n'));
       await interaction.editReply({ embeds: [embed] });
       return;
     }
@@ -121,13 +123,15 @@ async function handleSlashCommand(interaction) {
       const budget = interaction.options.getNumber('budget');
       const maxMinutes = interaction.options.getInteger('max_minutes');
       const lifestyle = interaction.options.getString('lifestyle');
+      const currency = interaction.options.getString('currency');
       if (experience !== null) patch.cooking_experience = experience;
       if (budget !== null) patch.max_price_per_serving = budget;
       if (maxMinutes !== null) patch.max_total_minutes = maxMinutes;
       if (lifestyle !== null) patch.lifestyle = lifestyle;
+      if (currency !== null) patch.currency_code = currency;
 
       if (!Object.keys(patch).length) {
-        await interaction.editReply('Give me at least one thing to set: experience, budget, max_minutes, or lifestyle.');
+        await interaction.editReply('Give me at least one thing to set: experience, budget, max_minutes, lifestyle, or currency.');
         return;
       }
       const { preferences: p } = await api.savePreferences(patch);

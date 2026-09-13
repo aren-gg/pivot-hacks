@@ -58,6 +58,8 @@ CREATE TABLE IF NOT EXISTS preferences (
   max_price_per_serving REAL,
   cooking_experience TEXT DEFAULT 'intermediate',
   max_total_minutes INTEGER,
+  currency_code TEXT DEFAULT 'USD',
+  currency_symbol TEXT DEFAULT '$',
   updated_at TEXT DEFAULT (datetime('now'))
 );
 INSERT OR IGNORE INTO preferences (id) VALUES (1);

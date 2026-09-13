@@ -7,7 +7,7 @@ function formatDate(iso) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-export default function DayCard({ day }) {
+export default function DayCard({ day, currencySymbol = '$' }) {
   const dayName = DAY_NAMES[new Date(`${day.date}T00:00:00Z`).getUTCDay()];
 
   return (
@@ -30,7 +30,7 @@ export default function DayCard({ day }) {
         day.meals
           .slice()
           .sort((a, b) => (a.mealType === 'lunch' ? -1 : 1))
-          .map((meal, i) => <MealRow key={meal.id ?? i} meal={meal} isFirst={i === 0} />)
+          .map((meal, i) => <MealRow key={meal.id ?? i} meal={meal} isFirst={i === 0} currencySymbol={currencySymbol} />)
       ) : (
         <p className="py-4 text-sm text-muted">No meals planned yet.</p>
       )}

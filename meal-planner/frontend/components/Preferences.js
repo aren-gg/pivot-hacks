@@ -7,13 +7,17 @@ const EXPERIENCE = ['beginner', 'intermediate', 'advanced'];
 
 export default function Preferences() {
   const [prefs, setPrefs] = useState(null);
+  const [currencies, setCurrencies] = useState([]);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     api
       .getPreferences()
-      .then((d) => setPrefs(d.preferences))
+      .then((d) => {
+        setPrefs(d.preferences);
+        setCurrencies(d.currencies || []);
+      })
       .catch((e) => setStatus({ type: 'error', msg: e.message }));
   }, []);
 
@@ -25,6 +29,11 @@ export default function Preferences() {
     setPrefs((p) => ({ ...p, [field]: value }));
   }
 
+  const currencySymbol =
+    (currencies.find((c) => c.code === (prefs.currency_code || 'USD')) || {}).symbol ||
+    prefs.currency_symbol ||
+    '$';
+
   async function save() {
     setSaving(true);
     setStatus(null);
@@ -32,6 +41,7 @@ export default function Preferences() {
       const payload = {
         lifestyle: prefs.lifestyle || '',
         cooking_experience: prefs.cooking_experience || 'intermediate',
+        currency_code: prefs.currency_code || 'USD',
         max_price_per_serving:
           prefs.max_price_per_serving === '' || prefs.max_price_per_serving == null
             ? null
@@ -73,7 +83,24 @@ export default function Preferences() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-ink mb-1">Budget per serving (USD)</label>
+        <label className="block text-sm font-medium text-ink mb-1">Currency</label>
+        <select
+          value={prefs.currency_code || 'USD'}
+          onChange={(e) => update('currency_code', e.target.value)}
+          className="w-56 rounded-xl2 border border-line bg-cream px-3 py-2 text-ink"
+        >
+          {currencies.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.symbol} — {c.code} ({c.name})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-ink mb-1">
+          Budget per serving ({currencySymbol})
+        </label>
         <input
           type="number"
           min="1"
