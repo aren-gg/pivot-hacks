@@ -23,8 +23,11 @@ export default function Fridge() {
   const [lastDeleted, setLastDeleted] = useState(null); // { item, timer }
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState('');
+  const [editingQtyId, setEditingQtyId] = useState(null);
+  const [editQty, setEditQty] = useState('');
+  const [editUnit, setEditUnit] = useState('');
   const editingRef = useRef(null);
-  editingRef.current = editingId;
+  editingRef.current = editingId ?? editingQtyId;
 
   function load() {
     api
@@ -114,6 +117,25 @@ export default function Fridge() {
     }
   }
 
+  function startEditQty(item) {
+    setEditingQtyId(item.id);
+    setEditQty(item.quantity ?? '');
+    setEditUnit(item.unit || '');
+  }
+
+  async function saveQty(id) {
+    const q = editQty === '' ? 0 : Number(editQty);
+    const u = editUnit.trim();
+    setItems((prev) => (prev ? prev.map((it) => (it.id === id ? { ...it, quantity: q, unit: u } : it)) : prev));
+    setEditingQtyId(null);
+    try {
+      await api.updateFridgeItem(id, { quantity: q, unit: u });
+    } catch (err) {
+      setError(err.message);
+      load();
+    }
+  }
+
   if (error) {
     return <div className="rounded-xl2 bg-card border border-rust px-6 py-4 text-rustDark">Couldn't load fridge: {error}</div>;
   }
@@ -190,9 +212,44 @@ export default function Fridge() {
             return (
               <div key={item.id} className="flex items-center gap-3 py-3">
                 <span className="flex-1 text-ink">{item.name}</span>
-                <span className="text-sm text-muted w-24 text-right">
-                  {item.quantity} {item.unit}
-                </span>
+                {editingQtyId === item.id ? (
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={editQty}
+                      onChange={(e) => setEditQty(e.target.value)}
+                      className="w-16 rounded-xl2 border border-line bg-cream px-2 py-1 text-sm text-ink"
+                    />
+                    <input
+                      value={editUnit}
+                      onChange={(e) => setEditUnit(e.target.value)}
+                      placeholder="unit"
+                      className="w-16 rounded-xl2 border border-line bg-cream px-2 py-1 text-sm text-ink"
+                    />
+                    <button
+                      onClick={() => saveQty(item.id)}
+                      className="text-sm text-rust hover:text-rustDark font-medium px-1"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingQtyId(null)}
+                      className="text-sm text-muted hover:text-ink px-1"
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => startEditQty(item)}
+                    title="Click to edit quantity"
+                    className="text-sm text-muted w-24 text-right underline decoration-dotted underline-offset-2 hover:text-rust"
+                  >
+                    {item.quantity} {item.unit}
+                  </button>
+                )}
                 {editingId === item.id ? (
                   <span className="flex items-center gap-1">
                     <input

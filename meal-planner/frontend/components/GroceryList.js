@@ -7,6 +7,7 @@ export default function GroceryList({ items: initialItems, total = 0, currencySy
   const [items, setItems] = useState(initialItems);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
+  const [lastDeleted, setLastDeleted] = useState(null); // { item, timer }
 
   useEffect(() => {
     setItems(initialItems);
@@ -42,13 +43,34 @@ export default function GroceryList({ items: initialItems, total = 0, currencySy
     }
   }
 
-  async function remove(id) {
-    setItems((prev) => prev.filter((it) => it.id !== id));
+  async function remove(item) {
+    setItems((prev) => prev.filter((it) => it.id !== item.id));
+    if (lastDeleted?.timer) clearTimeout(lastDeleted.timer);
+    const timer = setTimeout(() => setLastDeleted(null), 7000);
+    setLastDeleted({ item, timer });
     try {
-      await api.removeGroceryItem(id);
+      await api.removeGroceryItem(item.id);
       onChanged && (await onChanged());
     } catch {
       onChanged && onChanged();
+    }
+  }
+
+  async function undoRemove() {
+    if (!lastDeleted) return;
+    const { item, timer } = lastDeleted;
+    if (timer) clearTimeout(timer);
+    setLastDeleted(null);
+    if (!weekStart) return;
+    try {
+      await api.addGroceryItem(weekStart, {
+        name: item.name,
+        quantity: item.quantity ?? 1,
+        unit: item.unit || ''
+      });
+      onChanged && (await onChanged());
+    } catch (err) {
+      console.error(err);
     }
   }
 
@@ -56,6 +78,20 @@ export default function GroceryList({ items: initialItems, total = 0, currencySy
 
   return (
     <div className="space-y-4">
+      {lastDeleted && (
+        <div className="flex items-center justify-between rounded-xl2 bg-ink text-white px-5 py-3">
+          <span>
+            Removed <strong>{lastDeleted.item.name}</strong> from the list.
+          </span>
+          <button
+            onClick={undoRemove}
+            className="font-semibold underline underline-offset-2 hover:text-pill"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+
       <form onSubmit={addItem} className="flex gap-2">
         <input
           value={newName}
@@ -98,7 +134,7 @@ export default function GroceryList({ items: initialItems, total = 0, currencySy
                 {item.price != null ? money(item.price) : '—'}
               </span>
               <button
-                onClick={() => remove(item.id)}
+                onClick={() => remove(item)}
                 aria-label={`Remove ${item.name}`}
                 className="text-muted hover:text-rustDark px-1"
               >
