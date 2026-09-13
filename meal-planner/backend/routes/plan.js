@@ -31,7 +31,7 @@ router.delete('/grocery-list/:id', (req, res) => {
 
 router.patch('/grocery-list/:id', (req, res) => {
   const { checked } = req.body || {};
-  db.prepare('UPDATE grocery_list_items SET checked = ? WHERE id = ?').run(checked ? 1 : 0, req.params.id);
+  planService.setGroceryChecked(req.params.id, !!checked);
   res.status(204).end();
 });
 // Regenerate one meal using only what's in the fridge (ran out of ingredients

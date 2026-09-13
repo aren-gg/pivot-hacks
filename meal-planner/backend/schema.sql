@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS grocery_list_items (
   package_size TEXT DEFAULT '',
   price REAL,
   source TEXT DEFAULT 'plan',
+  fridge_item_id INTEGER,
   checked INTEGER DEFAULT 0,
   FOREIGN KEY (week_id) REFERENCES weeks(id)
 );

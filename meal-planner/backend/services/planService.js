@@ -242,13 +242,14 @@ function dedupeGroceryRows(weekId) {
     if (keeper.price == null && r.price != null) keeper.price = r.price;
     if (!keeper.package_size && r.package_size) keeper.package_size = r.package_size;
     if (!keeper.unit && r.unit) keeper.unit = r.unit;
+    if (keeper.fridge_item_id == null && r.fridge_item_id != null) keeper.fridge_item_id = r.fridge_item_id;
     // A merged line is manual if either side was manual (so it survives recompute).
     if (r.source === 'manual') keeper.source = 'manual';
     toDelete.push(r.id);
   }
 
   const update = db.prepare(
-    'UPDATE grocery_list_items SET quantity = ?, checked = ?, price = ?, package_size = ?, unit = ?, source = ? WHERE id = ?'
+    'UPDATE grocery_list_items SET quantity = ?, checked = ?, price = ?, package_size = ?, unit = ?, source = ?, fridge_item_id = ? WHERE id = ?'
   );
   const delStmt = db.prepare('DELETE FROM grocery_list_items WHERE id = ?');
   const tx = db.transaction(() => {
@@ -260,6 +261,7 @@ function dedupeGroceryRows(weekId) {
         k.package_size || '',
         k.unit || '',
         k.source || 'plan',
+        k.fridge_item_id ?? null,
         k.id
       );
     }
@@ -280,6 +282,33 @@ function addManualGroceryItem(weekStartISO, { name, quantity = 1, unit = '' }) {
 /** Remove a grocery list item by id (works for both manual and plan rows). */
 function removeGroceryItem(id) {
   return db.prepare('DELETE FROM grocery_list_items WHERE id = ?').run(id).changes;
+}
+
+/**
+ * Check/uncheck a grocery item, and keep the fridge in sync:
+ * checking a bought item adds it to the fridge; unchecking removes the fridge
+ * row we created for it. We tie them together with a fridge_item_id column on
+ * the grocery row so unticking removes exactly the right fridge entry.
+ */
+function setGroceryChecked(id, checked) {
+  const row = db.prepare('SELECT * FROM grocery_list_items WHERE id = ?').get(id);
+  if (!row) return { changed: 0 };
+
+  const want = checked ? 1 : 0;
+  db.prepare('UPDATE grocery_list_items SET checked = ? WHERE id = ?').run(want, id);
+
+  if (want === 1 && !row.fridge_item_id) {
+    // Add to fridge and remember which fridge row we created.
+    const info = db
+      .prepare('INSERT INTO fridge_items (name, quantity, unit) VALUES (?, ?, ?)')
+      .run(row.name, Number(row.quantity) || 1, row.unit || '');
+    db.prepare('UPDATE grocery_list_items SET fridge_item_id = ? WHERE id = ?').run(info.lastInsertRowid, id);
+  } else if (want === 0 && row.fridge_item_id) {
+    // Remove the fridge row we added when it was checked.
+    db.prepare('DELETE FROM fridge_items WHERE id = ?').run(row.fridge_item_id);
+    db.prepare('UPDATE grocery_list_items SET fridge_item_id = NULL WHERE id = ?').run(id);
+  }
+  return { changed: 1, checked: want };
 }
 
 /** Aggregate every ingredient across the week, minus what's already in the fridge. */
@@ -311,16 +340,27 @@ function computeGroceryList(weekStartISO) {
     }
   }
 
+  // Names of plan rows that are already checked off — keep these on the list
+  // (shown ticked) even if ticking added them to the fridge, so they don't
+  // vanish when the fridge-subtraction runs.
+  const checkedPlanNames = new Set(
+    db
+      .prepare("SELECT name FROM grocery_list_items WHERE week_id = ? AND source = 'plan' AND checked = 1")
+      .all(week.id)
+      .map((r) => r.name.toLowerCase().trim())
+  );
+
   const items = [];
   for (const { name, unit, quantity, packagePrice, packageSize } of needed.values()) {
     const inFridge = fridgeByName.get(name.toLowerCase().trim());
     const stillNeeded = inFridge ? Math.max(0, quantity - (Number(inFridge.quantity) || 0)) : quantity;
-    // If the fridge already covers the amount the recipes call for, don't buy it.
-    if (stillNeeded > 0.01) {
+    const alreadyChecked = checkedPlanNames.has(name.toLowerCase().trim());
+    // Keep the line if we still need to buy some, OR it's already been ticked off.
+    if (stillNeeded > 0.01 || alreadyChecked) {
       items.push({
         name,
         unit,
-        quantity: Math.round(stillNeeded * 100) / 100,
+        quantity: Math.round((stillNeeded > 0.01 ? stillNeeded : quantity) * 100) / 100,
         price: packagePrice > 0 ? Math.round(packagePrice * 100) / 100 : null,
         package_size: packageSize || ''
       });
@@ -330,19 +370,24 @@ function computeGroceryList(weekStartISO) {
 
   // Persist so checkbox state can stick across reloads. Only the plan-derived
   // rows are rebuilt; manually-added items (source='manual') are preserved.
+  // We carry over both the checked state and any fridge link so a checked
+  // item's fridge entry isn't orphaned by a recompute.
   const existing = db
-    .prepare("SELECT name, unit, checked FROM grocery_list_items WHERE week_id = ? AND source = 'plan'")
+    .prepare("SELECT name, unit, checked, fridge_item_id FROM grocery_list_items WHERE week_id = ? AND source = 'plan'")
     .all(week.id);
-  const checkedMap = new Map(existing.map((e) => [`${e.name.toLowerCase()}|${e.unit.toLowerCase()}`, e.checked]));
+  const stateMap = new Map(
+    existing.map((e) => [`${e.name.toLowerCase()}|${e.unit.toLowerCase()}`, { checked: e.checked, fridge_item_id: e.fridge_item_id }])
+  );
 
   db.prepare("DELETE FROM grocery_list_items WHERE week_id = ? AND source = 'plan'").run(week.id);
   const insert = db.prepare(
-    "INSERT INTO grocery_list_items (week_id, name, quantity, unit, package_size, price, source, checked) VALUES (?, ?, ?, ?, ?, ?, 'plan', ?)"
+    "INSERT INTO grocery_list_items (week_id, name, quantity, unit, package_size, price, source, fridge_item_id, checked) VALUES (?, ?, ?, ?, ?, ?, 'plan', ?, ?)"
   );
   const tx = db.transaction(() => {
     for (const it of items) {
       const key = `${it.name.toLowerCase()}|${it.unit.toLowerCase()}`;
-      insert.run(week.id, it.name, it.quantity, it.unit, it.package_size, it.price, checkedMap.get(key) || 0);
+      const prev = stateMap.get(key) || {};
+      insert.run(week.id, it.name, it.quantity, it.unit, it.package_size, it.price, prev.fridge_item_id || null, prev.checked || 0);
     }
   });
   tx();
@@ -469,6 +514,7 @@ module.exports = {
   updatePreferences,
   addManualGroceryItem,
   removeGroceryItem,
+  setGroceryChecked,
   swapMealFromFridge,
   findMeal
 };

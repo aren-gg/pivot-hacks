@@ -89,6 +89,16 @@ export default function Home() {
             currencySymbol={groceryList.currency?.symbol || '$'}
             weekStart={weekStart}
             onChanged={() => api.getGroceryList(weekStart).then(setGroceryList)}
+            onItemChecked={(id, checked) =>
+              setGroceryList((gl) =>
+                gl
+                  ? {
+                      ...gl,
+                      items: gl.items.map((it) => (it.id === id ? { ...it, checked: checked ? 1 : 0 } : it))
+                    }
+                  : gl
+              )
+            }
           />
         )}
       </div>

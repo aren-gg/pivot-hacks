@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
-export default function GroceryList({ items: initialItems, total = 0, currencySymbol = '$', weekStart, onChanged }) {
+export default function GroceryList({ items: initialItems, total = 0, currencySymbol = '$', weekStart, onChanged, onItemChecked }) {
   const [items, setItems] = useState(initialItems);
   const [newName, setNewName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -18,6 +18,9 @@ export default function GroceryList({ items: initialItems, total = 0, currencySy
     const item = next.find((it) => it.id === id);
     try {
       await api.setGroceryChecked(id, !!item.checked);
+      // Update parent state IN PLACE (do not recompute the list — recomputing
+      // would subtract the just-added fridge stock and make the item vanish).
+      onItemChecked && onItemChecked(id, !!item.checked);
     } catch {
       setItems(items);
     }
