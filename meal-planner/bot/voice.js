@@ -11,6 +11,9 @@ const api = require('./api');
 
 const ACCENT = 0xb5502e;
 
+// Wake word: the bot only responds to utterances that address it by name.
+const WAKE_WORD = process.env.COOK_WAKE_WORD || 'kevin';
+
 // Discord voice receive is 48kHz, 2-channel, 16-bit signed little-endian PCM.
 const SAMPLE_RATE = 48000;
 const CHANNELS = 2;
@@ -77,7 +80,7 @@ async function startCooking(interaction) {
   });
 
   await interaction.editReply(
-    `🎧 Listening in **${voiceChannel.name}**. Just talk while you cook — say things like "the sauce is too salty" or "what temp for chicken?" and I'll reply here. Run \`/stop-cooking\` when you're done.`
+    `🎧 Listening in **${voiceChannel.name}**. Say **"${WAKE_WORD}"** to get my attention — e.g. "${WAKE_WORD}, the sauce is too salty" or "hey ${WAKE_WORD}, what temp for chicken?" and I'll reply here. Run \`/stop-cooking\` when you're done.`
   );
 }
 
@@ -96,8 +99,9 @@ function captureUtterance(receiver, userId, session) {
     if (pcm.length < MIN_BYTES) return; // too short, ignore
     try {
       const wav = pcmToWav(pcm);
-      const { heard, advice } = await api.voiceFeedback(wav.toString('base64'), 'audio/wav');
-      if (!advice && !heard) return;
+      const { heard, triggered, advice } = await api.voiceFeedback(wav.toString('base64'), 'audio/wav', WAKE_WORD);
+      // Only respond when the cook addressed the bot by its wake word.
+      if (!triggered || !advice) return;
       const embed = new EmbedBuilder()
         .setColor(ACCENT)
         .setTitle('👩‍🍳 Cooking help')

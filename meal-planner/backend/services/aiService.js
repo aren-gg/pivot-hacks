@@ -314,17 +314,24 @@ Return the single meal JSON now.`;
 /**
  * Take a short audio clip of a home cook speaking while cooking, transcribe it,
  * and return brief spoken-style cooking feedback. `audioBase64` is raw base64
- * (no data: prefix); `mimeType` e.g. 'audio/wav'. Returns { heard, advice }.
+ * (no data: prefix); `mimeType` e.g. 'audio/wav'.
+ * If `wakeWord` is set, the cook must address the assistant by that name for
+ * advice to be given. Returns { heard, triggered, advice }.
  */
-async function voiceFeedback(audioBase64, mimeType = 'audio/wav') {
+async function voiceFeedback(audioBase64, mimeType = 'audio/wav', wakeWord = '') {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set. Add it to backend/.env');
 
-  const system = `You are a hands-free sous-chef listening to a home cook who is actively cooking and can't look at a screen.
+  const wake = (wakeWord || '').trim();
+  const system = wake
+    ? `You are a hands-free sous-chef named "${wake}" listening to a home cook who is actively cooking and can't look at a screen.
+You receive a short audio clip of them speaking. First transcribe it. Only respond with cooking help IF the cook addressed you by name ("${wake}") in the clip (e.g. "${wake}, the sauce is too salty" or "hey ${wake} what temp for chicken"). Name-matching should be lenient to transcription errors of "${wake}".
+Output ONLY valid JSON, no prose, no fences, matching exactly:
+{"heard": "clean transcription of what they said", "wake_detected": true | false, "advice": "if wake_detected is true, 1-2 short sentences of actionable cooking help answering their request (with the wake word removed); if wake_detected is false, empty string"}`
+    : `You are a hands-free sous-chef listening to a home cook who is actively cooking and can't look at a screen.
 You receive a short audio clip of them speaking. Transcribe what they said, then give ONE concise, practical piece of cooking help.
 Output ONLY valid JSON, no prose, no fences, matching exactly:
-{"heard": "string, a clean transcription of what they said", "advice": "string, 1-2 short sentences of actionable cooking help; if it's a question, answer it directly"}
-If the audio has no clear speech or isn't about cooking, set advice to a brief friendly nudge and heard to your best transcription (or "").`;
+{"heard": "clean transcription", "wake_detected": true, "advice": "1-2 short sentences of actionable cooking help; if it's a question, answer it directly"}`;
 
   const url = `${API_BASE}/${MODEL}:generateContent`;
   const res = await fetch(url, {
@@ -355,7 +362,11 @@ If the audio has no clear speech or isn't about cooking, set advice to a brief f
   const raw = (candidate?.content?.parts || []).map((p) => p.text || '').join('');
   if (!raw.trim()) throw new Error(`Gemini returned no text (finishReason: ${candidate?.finishReason || 'unknown'}).`);
   const parsed = extractJson(raw);
-  return { heard: parsed.heard || '', advice: parsed.advice || '' };
+  return {
+    heard: parsed.heard || '',
+    triggered: parsed.wake_detected !== false,
+    advice: parsed.advice || ''
+  };
 }
 
 module.exports = { generateWeekPlan, parseMessage, parseReceipt, regenerateMeal, voiceFeedback, callClaude, extractJson };

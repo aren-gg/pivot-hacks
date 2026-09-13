@@ -21,8 +21,8 @@ module.exports = {
   getFridge: () => request('/api/fridge'),
   uploadReceipt: (imageBase64, mimeType) =>
     request('/api/receipt', { method: 'POST', body: JSON.stringify({ imageBase64, mimeType }) }),
-  voiceFeedback: (audioBase64, mimeType) =>
-    request('/api/voice-feedback', { method: 'POST', body: JSON.stringify({ audioBase64, mimeType }) }),
+  voiceFeedback: (audioBase64, mimeType, wakeWord) =>
+    request('/api/voice-feedback', { method: 'POST', body: JSON.stringify({ audioBase64, mimeType, wakeWord }) }),
   getPreferences: () => request('/api/preferences'),
   savePreferences: (prefs) => request('/api/preferences', { method: 'PUT', body: JSON.stringify(prefs) }),
   addGrocery: (item) => request('/api/groceries', { method: 'POST', body: JSON.stringify(item) }),
