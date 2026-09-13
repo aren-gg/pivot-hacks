@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Partials, Events } = require('discord.js');
-const { handleSlashCommand } = require('./commands');
+const { handleSlashCommand, processReceiptAttachment } = require('./commands');
 const { scheduleAll } = require('./notifications');
 const api = require('./api');
 
@@ -33,11 +33,23 @@ client.on(Events.MessageCreate, async (message) => {
   if (MEAL_CHANNEL_ID && message.channelId !== MEAL_CHANNEL_ID) return;
 
   try {
+    // If the message has an image attachment, treat it as a receipt scan.
+    const image = message.attachments.find(
+      (a) => a.contentType && a.contentType.startsWith('image')
+    );
+    if (image) {
+      await message.channel.sendTyping();
+      const embed = await processReceiptAttachment(image);
+      await message.reply({ embeds: [embed] });
+      return;
+    }
+
+    if (!message.content.trim()) return;
     await message.channel.sendTyping();
     const result = await api.parseMessage(message.content);
     if (result.reply) await message.reply(result.reply);
   } catch (err) {
-    console.error('Message parse failed:', err);
+    console.error('Message handling failed:', err);
     await message.reply("I couldn't reach the planner backend just now — try again in a bit.");
   }
 });

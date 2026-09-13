@@ -43,6 +43,61 @@ async function callClaude({ system, prompt, maxTokens = 2000 }) {
   return parts.map((p) => p.text || '').join('');
 }
 
+/**
+ * Read a grocery receipt image and extract its food items with estimated
+ * shelf life. `imageBase64` is the raw base64 (no data: prefix); `mimeType`
+ * is e.g. 'image/jpeg' or 'image/png'. Returns an array of
+ * { name, quantity, unit, days_until_expiry }.
+ */
+async function parseReceipt(imageBase64, mimeType = 'image/jpeg') {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('GEMINI_API_KEY is not set. Add it to backend/.env');
+  }
+
+  const system = `You read a photo of a grocery receipt and extract every FOOD item.
+Output ONLY valid JSON, no prose, no markdown fences, matching exactly this shape:
+[
+  {"name": "string, the food item", "quantity": number, "unit": "string", "days_until_expiry": number}
+]
+Rules:
+- Include only edible groceries; skip taxes, totals, store names, loyalty lines, bags, non-food.
+- Normalize cryptic receipt abbreviations to plain names (e.g. "GV MLK 2%" -> "milk").
+- quantity defaults to 1 and unit to "" if not clear from the receipt.
+- days_until_expiry: estimate from typical shelf life (fresh fish ~2, chicken ~3, leafy greens ~5, bread ~5, milk ~7, eggs ~21, dry/canned goods ~365).
+- If you cannot read any food items, return [].`;
+
+  const url = `${API_BASE}/${MODEL}:generateContent`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: system }] },
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { text: 'Extract the food items from this receipt as JSON.' },
+            { inline_data: { mime_type: mimeType, data: imageBase64 } }
+          ]
+        }
+      ],
+      generationConfig: { maxOutputTokens: 2000, responseMimeType: 'application/json' }
+    })
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Gemini vision error ${res.status}: ${errText}`);
+  }
+
+  const data = await res.json();
+  const parts = data?.candidates?.[0]?.content?.parts || [];
+  const raw = parts.map((p) => p.text || '').join('');
+  const parsed = extractJson(raw);
+  return Array.isArray(parsed) ? parsed : parsed.items || [];
+}
+
 /** Strip ```json fences and any stray preamble so JSON.parse doesn't choke. */
 function extractJson(raw) {
   const cleaned = raw.replace(/```json|```/g, '').trim();
@@ -193,4 +248,4 @@ Guidance:
   return extractJson(raw);
 }
 
-module.exports = { generateWeekPlan, parseMessage, callClaude, extractJson };
+module.exports = { generateWeekPlan, parseMessage, parseReceipt, callClaude, extractJson };

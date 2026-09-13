@@ -19,6 +19,8 @@ module.exports = {
   removeFridgeItem: (name) =>
     request('/api/fridge/remove-by-name', { method: 'POST', body: JSON.stringify({ name }) }),
   getFridge: () => request('/api/fridge'),
+  uploadReceipt: (imageBase64, mimeType) =>
+    request('/api/receipt', { method: 'POST', body: JSON.stringify({ imageBase64, mimeType }) }),
   getPreferences: () => request('/api/preferences'),
   savePreferences: (prefs) => request('/api/preferences', { method: 'PUT', body: JSON.stringify(prefs) }),
   addGrocery: (item) => request('/api/groceries', { method: 'POST', body: JSON.stringify(item) }),

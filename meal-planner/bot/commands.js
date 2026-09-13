@@ -21,6 +21,34 @@ function prefsSummary(p) {
   ].join('\n');
 }
 
+/**
+ * Download a Discord image attachment, send it to the backend receipt
+ * endpoint, and return a Discord embed summarizing what was added.
+ */
+async function processReceiptAttachment(attachment) {
+  const resp = await fetch(attachment.url);
+  const buf = Buffer.from(await resp.arrayBuffer());
+  const imageBase64 = buf.toString('base64');
+  const mimeType = attachment.contentType || 'image/jpeg';
+
+  const { added = [], message } = await api.uploadReceipt(imageBase64, mimeType);
+
+  if (!added.length) {
+    return new EmbedBuilder()
+      .setColor(ACCENT)
+      .setTitle('Receipt scanned')
+      .setDescription(message || "I couldn't read any food items from that receipt. Try a clearer photo.");
+  }
+
+  const lines = added.map(
+    (i) => `• ${i.quantity} ${i.unit} ${i.name}${i.expires_at ? ` — use by ${i.expires_at}` : ''}`.replace('  ', ' ')
+  );
+  return new EmbedBuilder()
+    .setColor(ACCENT)
+    .setTitle(`Added ${added.length} item${added.length === 1 ? '' : 's'} to your fridge`)
+    .setDescription(lines.join('\n') + '\n\nThey now show up on the website and in meal planning.');
+}
+
 async function handleSlashCommand(interaction) {
   const { commandName } = interaction;
   await interaction.deferReply();
@@ -61,6 +89,17 @@ async function handleSlashCommand(interaction) {
         .setTitle("What's in the fridge")
         .setDescription(lines.join('\n'));
       await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
+    if (commandName === 'receipt') {
+      const photo = interaction.options.getAttachment('photo', true);
+      if (!photo.contentType || !photo.contentType.startsWith('image')) {
+        await interaction.editReply("That doesn't look like an image — attach a photo of your receipt.");
+        return;
+      }
+      const result = await processReceiptAttachment(photo);
+      await interaction.editReply({ embeds: [result] });
       return;
     }
 
@@ -162,4 +201,4 @@ async function handleSlashCommand(interaction) {
   }
 }
 
-module.exports = { handleSlashCommand };
+module.exports = { handleSlashCommand, processReceiptAttachment };

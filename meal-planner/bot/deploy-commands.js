@@ -22,6 +22,13 @@ const commands = [
   new SlashCommandBuilder().setName('fridge-list').setDescription("Show what's currently in your fridge"),
 
   new SlashCommandBuilder()
+    .setName('receipt')
+    .setDescription('Scan a grocery receipt photo and add the items to your fridge')
+    .addAttachmentOption((o) =>
+      o.setName('photo').setDescription('A photo of your grocery receipt').setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
     .setName('grocery-bought')
     .setDescription('Log something you just bought (also adds it to the fridge)')
     .addStringOption((o) => o.setName('name').setDescription('item name').setRequired(true))
