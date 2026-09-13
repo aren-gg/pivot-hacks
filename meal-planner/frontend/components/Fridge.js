@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 
 function expiryLabel(iso) {
@@ -21,6 +21,10 @@ export default function Fridge() {
   const [form, setForm] = useState({ name: '', quantity: '', unit: '', expires_at: '' });
   const [busy, setBusy] = useState(false);
   const [lastDeleted, setLastDeleted] = useState(null); // { item, timer }
+  const [editingId, setEditingId] = useState(null);
+  const [editDate, setEditDate] = useState('');
+  const editingRef = useRef(null);
+  editingRef.current = editingId;
 
   function load() {
     api
@@ -31,8 +35,11 @@ export default function Fridge() {
 
   useEffect(() => {
     load();
-    // Poll so receipt scans / Discord updates show up without a manual refresh.
-    const t = setInterval(load, 8000);
+    // Poll so receipt scans / Discord updates show up without a manual refresh,
+    // but pause while the user is editing an expiry so it isn't clobbered.
+    const t = setInterval(() => {
+      if (editingRef.current === null) load();
+    }, 8000);
     return () => clearInterval(t);
   }, []);
 
@@ -86,6 +93,24 @@ export default function Fridge() {
       load();
     } catch (err) {
       setError(err.message);
+    }
+  }
+
+  function startEditExpiry(item) {
+    setEditingId(item.id);
+    setEditDate(item.expires_at || '');
+  }
+
+  async function saveExpiry(id) {
+    const value = editDate || null;
+    // Optimistic update
+    setItems((prev) => (prev ? prev.map((it) => (it.id === id ? { ...it, expires_at: value } : it)) : prev));
+    setEditingId(null);
+    try {
+      await api.updateFridgeItem(id, { expires_at: value });
+    } catch (err) {
+      setError(err.message);
+      load();
     }
   }
 
@@ -168,9 +193,38 @@ export default function Fridge() {
                 <span className="text-sm text-muted w-24 text-right">
                   {item.quantity} {item.unit}
                 </span>
-                <span className={`text-sm w-40 text-right ${exp ? exp.tone : 'text-muted'}`}>
-                  {exp ? exp.text : 'no expiry'}
-                </span>
+                {editingId === item.id ? (
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="date"
+                      value={editDate}
+                      onChange={(e) => setEditDate(e.target.value)}
+                      className="rounded-xl2 border border-line bg-cream px-2 py-1 text-sm text-ink"
+                    />
+                    <button
+                      onClick={() => saveExpiry(item.id)}
+                      className="text-sm text-rust hover:text-rustDark font-medium px-1"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => setEditingId(null)}
+                      className="text-sm text-muted hover:text-ink px-1"
+                    >
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => startEditExpiry(item)}
+                    title="Click to edit expiration date"
+                    className={`text-sm w-40 text-right underline decoration-dotted underline-offset-2 hover:text-rust ${
+                      exp ? exp.tone : 'text-muted'
+                    }`}
+                  >
+                    {exp ? exp.text : 'set expiry'}
+                  </button>
+                )}
                 <button
                   onClick={() => removeItem(item)}
                   aria-label={`Remove ${item.name}`}

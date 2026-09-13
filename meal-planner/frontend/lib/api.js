@@ -28,6 +28,19 @@ async function put(path, body) {
   return res.json();
 }
 
+async function patch2(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const t = await res.text().catch(() => '');
+    throw new Error(`PATCH ${path} failed: ${res.status} ${t}`);
+  }
+  return res.json();
+}
+
 export function addDaysISO(iso, n) {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
@@ -67,6 +80,7 @@ export const api = {
   removeGroceryItem: (id) => del(`/api/plan/grocery-list/${id}`),
   getFridge: () => get('/api/fridge'),
   addFridgeItem: (item) => post('/api/fridge', item),
+  updateFridgeItem: (id, patch) => patch2(`/api/fridge/${id}`, patch),
   removeFridgeItem: (id) => del(`/api/fridge/${id}`),
   getPreferences: () => get('/api/preferences'),
   savePreferences: (prefs) => put('/api/preferences', prefs)
