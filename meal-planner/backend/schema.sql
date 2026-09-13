@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS fridge_items (
   unit TEXT DEFAULT '',
   category TEXT DEFAULT 'other',
   added_at TEXT DEFAULT (datetime('now')),
+  expires_at TEXT,
   used_up INTEGER DEFAULT 0
 );
 
@@ -71,6 +72,8 @@ CREATE TABLE IF NOT EXISTS grocery_list_items (
   quantity REAL DEFAULT 0,
   unit TEXT DEFAULT '',
   category TEXT DEFAULT 'other',
+  package_size TEXT DEFAULT '',
+  price REAL,
   checked INTEGER DEFAULT 0,
   FOREIGN KEY (week_id) REFERENCES weeks(id)
 );

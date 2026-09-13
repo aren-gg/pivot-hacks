@@ -108,11 +108,16 @@ async function handleSlashCommand(interaction) {
         await interaction.editReply("Nothing needed — the fridge already covers this week's plan.");
         return;
       }
-      const lines = list.items.map((i) => `• ${i.quantity} ${i.unit} ${i.name}`.replace('  ', ' '));
+      const sym = list.currency?.symbol || '$';
+      const lines = list.items.map((i) => {
+        const price = i.price != null ? ` — ${sym}${Number(i.price).toFixed(2)}` : '';
+        return `• ${i.quantity} ${i.unit} ${i.name}${price}`.replace('  ', ' ');
+      });
+      const total = list.total != null ? `\n\n**Estimated total: ${sym}${Number(list.total).toFixed(2)}**` : '';
       const embed = new EmbedBuilder()
         .setColor(ACCENT)
         .setTitle("This week's grocery list")
-        .setDescription(lines.join('\n'));
+        .setDescription(lines.join('\n') + total);
       await interaction.editReply({ embeds: [embed] });
       return;
     }

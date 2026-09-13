@@ -52,8 +52,15 @@ function scheduleWeeklyPlanning(client) {
 
       if (!channel) return;
 
+      const sym = list.currency?.symbol || '$';
       const groceryLines = list.items.length
-        ? list.items.map((i) => `• ${i.quantity} ${i.unit} ${i.name}`.replace('  ', ' ')).join('\n')
+        ? list.items
+            .map((i) => {
+              const price = i.price != null ? ` — ${sym}${Number(i.price).toFixed(2)}` : '';
+              return `• ${i.quantity} ${i.unit} ${i.name}${price}`.replace('  ', ' ');
+            })
+            .join('\n') +
+          (list.total != null ? `\n\n**Estimated total: ${sym}${Number(list.total).toFixed(2)}**` : '')
         : 'Nothing needed — the fridge covers it.';
 
       const embed = new EmbedBuilder()

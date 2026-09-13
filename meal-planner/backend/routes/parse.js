@@ -19,8 +19,8 @@ router.post('/', async (req, res) => {
         break;
       }
       case 'fridge_add': {
-        const insert = db.prepare('INSERT INTO fridge_items (name, quantity, unit) VALUES (?, ?, ?)');
-        for (const it of items) insert.run(it.name, it.quantity || 1, it.unit || '');
+        const insert = db.prepare('INSERT INTO fridge_items (name, quantity, unit, expires_at) VALUES (?, ?, ?, ?)');
+        for (const it of items) insert.run(it.name, it.quantity || 1, it.unit || '', it.expires_at || null);
         break;
       }
       case 'fridge_remove': {
@@ -32,10 +32,10 @@ router.post('/', async (req, res) => {
       }
       case 'grocery_bought': {
         const insertGrocery = db.prepare('INSERT INTO groceries_bought (name, quantity, unit) VALUES (?, ?, ?)');
-        const insertFridge = db.prepare('INSERT INTO fridge_items (name, quantity, unit) VALUES (?, ?, ?)');
+        const insertFridge = db.prepare('INSERT INTO fridge_items (name, quantity, unit, expires_at) VALUES (?, ?, ?, ?)');
         for (const it of items) {
           insertGrocery.run(it.name, it.quantity || 1, it.unit || '');
-          insertFridge.run(it.name, it.quantity || 1, it.unit || '');
+          insertFridge.run(it.name, it.quantity || 1, it.unit || '', it.expires_at || null);
         }
         break;
       }
@@ -47,7 +47,7 @@ router.post('/', async (req, res) => {
         const fridge = planService.getActiveFridgeItems();
         parsed.reply = fridge.length
           ? `Here's what's in your fridge:\n${fridge
-              .map((f) => `• ${f.quantity} ${f.unit} ${f.name}`.replace('  ', ' '))
+              .map((f) => `• ${f.quantity} ${f.unit} ${f.name}${f.expires_at ? ` (expires ${f.expires_at})` : ''}`.replace('  ', ' '))
               .join('\n')}`
           : "Your fridge is empty right now — nothing logged.";
         break;

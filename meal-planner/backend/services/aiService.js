@@ -78,7 +78,7 @@ You output ONLY valid JSON, no prose, no markdown fences, matching exactly this 
           "prep_minutes": number (integer, hands-on prep time in minutes),
           "cook_minutes": number (integer, cooking/baking time in minutes),
           "difficulty": "easy" | "medium" | "hard",
-          "ingredients": [{"name": "string", "quantity": number, "unit": "string"}],
+          "ingredients": [{"name": "string", "quantity": number (amount this recipe uses), "unit": "string", "purchase_package": "string (the realistic retail package you'd buy, e.g. '16 oz jar', '1 lb bag', 'dozen'), "package_price": number (realistic full retail price to BUY that whole package, in the user's currency, 1 decimal), "expires_on": "YYYY-MM-DD (realistic use-by date for this ingredient given typical shelf life from the plan start date; for a fridge item that already has an expiry, use that date)"}],
           "recipe": "string, 2-4 short sentences"
         }
       ]
@@ -93,6 +93,10 @@ Rules:
 - Keep estimated prices realistic for home cooking.
 - Flag needs_defrost true only for dinners using raw frozen meat/fish/poultry as the protein.
 - Always include realistic prep_minutes and cook_minutes for every meal (leftovers should have small prep and near-zero cook time).
+- For every ingredient, give purchase_package and package_price reflecting a REAL retail unit you actually buy, not a pro-rated sliver. Example: a recipe using 1 tbsp peanut butter still lists purchase_package "16 oz jar" and package_price around 4.50 — you buy the whole jar. Staples (salt, oil, spices) you likely already own can use a small package_price.
+- Plan the week so purchased packages get USED UP across multiple meals — if a recipe needs part of a package, reuse the rest in other meals that week so little is wasted. Avoid buying a package for a single tablespoon unless unavoidable.
+- Prioritize ingredients already in the fridge, ESPECIALLY ones expiring soonest — schedule those into earlier days so they're used before they spoil. When a meal uses a soon-to-expire fridge item, mention it in the recipe text (e.g. "Use the spinach now — it expires in 2 days.").
+- For every ingredient, set expires_on to a realistic use-by date based on typical shelf life measured from the week's start date (e.g. fresh fish ~2 days, chicken ~3 days, leafy greens ~5 days, eggs ~3 weeks, dry/canned goods ~months). If a fridge item already has an expiry date, reuse that exact date.
 - Set difficulty honestly based on technique required.
 ${personalizationRules(prefs)}`;
 
@@ -102,7 +106,7 @@ Dates to plan (in order): ${days.join(', ')}
 
 ${personalizationContext(prefs)}
 Current fridge inventory:
-${fridgeItems.length ? fridgeItems.map((f) => `- ${f.quantity} ${f.unit} ${f.name}`).join('\n') : '(empty)'}
+${fridgeItems.length ? fridgeItems.map((f) => `- ${f.quantity} ${f.unit} ${f.name}${f.expires_at ? ` (expires ${f.expires_at})` : ''}`).join('\n') : '(empty)'}
 
 Recently bought groceries (last 7 days):
 ${groceries.length ? groceries.map((g) => `- ${g.quantity} ${g.unit} ${g.name}`).join('\n') : '(none logged)'}
@@ -162,11 +166,13 @@ function personalizationContext(prefs) {
  * should take, plus a short natural reply to send back to the user.
  */
 async function parseMessage(text) {
+  const today = new Date().toISOString().slice(0, 10);
   const system = `You read one short chat message sent to a meal-planning Discord bot and turn it into ONE structured action.
+Today's date is ${today}. Resolve any relative dates (e.g. "in 5 days", "next friday") to an absolute YYYY-MM-DD based on today.
 Output ONLY valid JSON matching exactly this shape, no prose, no markdown fences:
 {
   "intent": "craving" | "fridge_add" | "fridge_remove" | "grocery_bought" | "generate_plan" | "show_plan" | "show_fridge" | "grocery_list" | "other",
-  "items": [{"name": "string", "quantity": number, "unit": "string"}],
+  "items": [{"name": "string", "quantity": number, "unit": "string", "expires_at": "YYYY-MM-DD or empty string if no expiry mentioned"}],
   "craving_text": "string, only for intent=craving",
   "reply": "string, one short friendly sentence confirming what you understood, in the app's plain conversational voice, no emoji spam (max one emoji)"
 }
@@ -175,6 +181,7 @@ Guidance:
 - "bought 2 lbs chicken thighs and a bag of rice" -> intent grocery_bought, items for each thing bought
 - "used up the eggs" / "we're out of milk" -> intent fridge_remove, items
 - "just got back from the store, added broccoli, tofu, soy sauce to the fridge" -> intent fridge_add, items
+- "bought milk, expires next friday" or "chicken that goes bad in 3 days" -> set that item's expires_at to the resolved YYYY-MM-DD date; otherwise leave expires_at empty
 - "plan my week" / "generate this week's meals" -> intent generate_plan
 - "what's for dinner today" / "show my plan" -> intent show_plan
 - "what's in the fridge" / "what do I have" / "list my fridge" -> intent show_fridge
@@ -182,7 +189,7 @@ Guidance:
 - default unit to "" and quantity to 1 if not specified
 - if the message doesn't map to any of these, use intent "other" and a helpful reply explaining what the bot can do`;
 
-  const raw = await callClaude({ system, prompt: text, maxTokens: 600 });
+  const raw = await callClaude({ system, prompt: text, maxTokens: 2000 });
   return extractJson(raw);
 }
 

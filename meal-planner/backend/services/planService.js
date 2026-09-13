@@ -229,23 +229,39 @@ function computeGroceryList(weekStartISO) {
   const fridge = getActiveFridgeItems();
   const fridgeByName = new Map(fridge.map((f) => [f.name.toLowerCase().trim(), f]));
 
-  const needed = new Map(); // name -> {name, quantity, unit}
+  // Aggregate by ingredient name. We show ONE realistic retail package per
+  // ingredient (you buy a whole jar, not a tablespoon), so price is the full
+  // package_price, not a pro-rated fraction.
+  const needed = new Map(); // nameKey -> {name, unit, quantity, packagePrice, packageSize}
   for (const m of meals) {
     const ingredients = JSON.parse(m.ingredients_json || '[]');
     for (const ing of ingredients) {
-      const key = `${ing.name.toLowerCase().trim()}|${(ing.unit || '').toLowerCase()}`;
-      const prev = needed.get(key) || { name: ing.name, unit: ing.unit || '', quantity: 0 };
+      const nameKey = ing.name.toLowerCase().trim();
+      const prev =
+        needed.get(nameKey) || { name: ing.name, unit: ing.unit || '', quantity: 0, packagePrice: 0, packageSize: '' };
       prev.quantity += Number(ing.quantity) || 0;
-      needed.set(key, prev);
+      // Same product across meals => same package. Keep the highest stated
+      // package price seen (guards against a stray tiny value) and a size label.
+      const pp = Number(ing.package_price) || 0;
+      if (pp > prev.packagePrice) prev.packagePrice = pp;
+      if (!prev.packageSize && ing.purchase_package) prev.packageSize = String(ing.purchase_package);
+      needed.set(nameKey, prev);
     }
   }
 
   const items = [];
-  for (const { name, unit, quantity } of needed.values()) {
+  for (const { name, unit, quantity, packagePrice, packageSize } of needed.values()) {
     const inFridge = fridgeByName.get(name.toLowerCase().trim());
     const stillNeeded = inFridge ? Math.max(0, quantity - (Number(inFridge.quantity) || 0)) : quantity;
+    // If the fridge already covers the amount the recipes call for, don't buy it.
     if (stillNeeded > 0.01) {
-      items.push({ name, unit, quantity: Math.round(stillNeeded * 100) / 100 });
+      items.push({
+        name,
+        unit,
+        quantity: Math.round(stillNeeded * 100) / 100,
+        price: packagePrice > 0 ? Math.round(packagePrice * 100) / 100 : null,
+        package_size: packageSize || ''
+      });
     }
   }
   items.sort((a, b) => a.name.localeCompare(b.name));
@@ -256,19 +272,23 @@ function computeGroceryList(weekStartISO) {
 
   db.prepare('DELETE FROM grocery_list_items WHERE week_id = ?').run(week.id);
   const insert = db.prepare(
-    'INSERT INTO grocery_list_items (week_id, name, quantity, unit, checked) VALUES (?, ?, ?, ?, ?)'
+    'INSERT INTO grocery_list_items (week_id, name, quantity, unit, package_size, price, checked) VALUES (?, ?, ?, ?, ?, ?, ?)'
   );
   const tx = db.transaction(() => {
     for (const it of items) {
       const key = `${it.name.toLowerCase()}|${it.unit.toLowerCase()}`;
-      insert.run(week.id, it.name, it.quantity, it.unit, checkedMap.get(key) || 0);
+      insert.run(week.id, it.name, it.quantity, it.unit, it.package_size, it.price, checkedMap.get(key) || 0);
     }
   });
   tx();
 
+  const rows = db.prepare('SELECT * FROM grocery_list_items WHERE week_id = ? ORDER BY name ASC').all(week.id);
+  const total = rows.reduce((sum, r) => sum + (Number(r.price) || 0), 0);
+
   return {
     weekStart: weekStartISO,
-    items: db.prepare('SELECT * FROM grocery_list_items WHERE week_id = ? ORDER BY name ASC').all(week.id),
+    items: rows,
+    total: Math.round(total * 100) / 100,
     currency: currencyInfo()
   };
 }

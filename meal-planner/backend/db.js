@@ -26,5 +26,8 @@ ensureColumn('meals', 'cook_minutes', 'INTEGER');
 ensureColumn('meals', 'difficulty', "TEXT DEFAULT ''");
 ensureColumn('preferences', 'currency_code', "TEXT DEFAULT 'USD'");
 ensureColumn('preferences', 'currency_symbol', "TEXT DEFAULT '$'");
+ensureColumn('grocery_list_items', 'price', 'REAL');
+ensureColumn('grocery_list_items', 'package_size', "TEXT DEFAULT ''");
+ensureColumn('fridge_items', 'expires_at', 'TEXT');
 
 module.exports = db;

@@ -55,6 +55,9 @@ export default function MealRow({ meal, isFirst, currencySymbol = '$' }) {
               {meal.ingredients.map((ing, i) => (
                 <li key={i}>
                   {ing.quantity} {ing.unit} {ing.name}
+                  {ing.expires_on ? (
+                    <span className="text-rustDark"> · use by {ing.expires_on}</span>
+                  ) : null}
                 </li>
               ))}
             </ul>

@@ -9,11 +9,11 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { name, quantity = 1, unit = '', category = 'other' } = req.body || {};
+  const { name, quantity = 1, unit = '', category = 'other', expires_at = null } = req.body || {};
   if (!name) return res.status(400).json({ error: 'name is required' });
   const info = db
-    .prepare('INSERT INTO fridge_items (name, quantity, unit, category) VALUES (?, ?, ?, ?)')
-    .run(name, quantity, unit, category);
+    .prepare('INSERT INTO fridge_items (name, quantity, unit, category, expires_at) VALUES (?, ?, ?, ?, ?)')
+    .run(name, quantity, unit, category, expires_at);
   const item = db.prepare('SELECT * FROM fridge_items WHERE id = ?').get(info.lastInsertRowid);
   res.status(201).json({ item });
 });

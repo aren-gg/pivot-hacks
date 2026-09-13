@@ -79,7 +79,13 @@ export default function Home() {
           </>
         )}
 
-        {!loading && !error && tab === 'grocery' && <GroceryList items={groceryList.items} />}
+        {!loading && !error && tab === 'grocery' && (
+          <GroceryList
+            items={groceryList.items}
+            total={groceryList.total || 0}
+            currencySymbol={groceryList.currency?.symbol || '$'}
+          />
+        )}
       </div>
     </main>
   );
