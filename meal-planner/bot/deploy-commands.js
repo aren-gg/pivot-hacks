@@ -109,7 +109,9 @@ const commands = [
         )
     ),
 
-  new SlashCommandBuilder().setName('preferences-show').setDescription('Show your current meal preferences')
+  new SlashCommandBuilder().setName('preferences-show').setDescription('Show your current meal preferences'),
+
+  new SlashCommandBuilder().setName('help').setDescription('List all commands and what each one does')
 ].map((c) => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);

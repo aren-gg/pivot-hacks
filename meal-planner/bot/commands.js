@@ -55,6 +55,58 @@ async function handleSlashCommand(interaction) {
   await interaction.deferReply();
 
   try {
+    if (commandName === 'help') {
+      const embed = new EmbedBuilder()
+        .setColor(ACCENT)
+        .setTitle('🍳 Meal Planner Bot — Commands')
+        .setDescription('Plan meals, track your fridge, build grocery lists, and get hands-free cooking help. You can also just type naturally in the meal channel, or drop a receipt photo.')
+        .addFields(
+          {
+            name: '📅 Meal planning',
+            value: [
+              "`/plan-generate` — Generate this week's meal plan now",
+              "`/plan-today` — Show today's lunch and dinner",
+              "`/meal-swap` — Ran out of ingredients? Re-make a planned meal from what's in your fridge",
+              "`/craving` — Tell the planner what you're craving this week"
+            ].join('\n')
+          },
+          {
+            name: '🧊 Fridge',
+            value: [
+              '`/fridge-add` — Add an item to your fridge inventory',
+              '`/fridge-remove` — Mark a fridge item as used up',
+              "`/fridge-list` — Show what's currently in your fridge",
+              '`/receipt` — Scan a grocery receipt photo to add items automatically'
+            ].join('\n')
+          },
+          {
+            name: '🛒 Groceries',
+            value: [
+              "`/grocery-list` — Show this week's grocery list (with prices)",
+              '`/grocery-add` — Add an item to your to-buy list',
+              '`/grocery-bought` — Log something you bought (also adds it to the fridge)'
+            ].join('\n')
+          },
+          {
+            name: '🎧 Hands-free cooking',
+            value: [
+              "`/cook` — I'll listen in your voice channel and give cooking feedback as you talk",
+              '`/stop-cooking` — Stop listening'
+            ].join('\n')
+          },
+          {
+            name: '⚙️ Preferences',
+            value: [
+              '`/preferences` — Set diet, budget, cooking experience, time limit, and currency',
+              '`/preferences-show` — Show your current preferences'
+            ].join('\n')
+          }
+        )
+        .setFooter({ text: 'Tip: in the meal channel you can also just say things like "bought 2 lbs chicken" or "what\'s in the fridge?"' });
+      await interaction.editReply({ embeds: [embed] });
+      return;
+    }
+
     if (commandName === 'craving') {
       const text = interaction.options.getString('text', true);
       await api.addCraving(text);
